@@ -64,8 +64,10 @@ const App: React.FC = () => {
       const updatedHistory = [...history, newHistoryItem].slice(-20);
       setHistory(updatedHistory);
       localStorage.setItem('cf_content_history', JSON.stringify(updatedHistory));
-    } catch (error) {
-      alert("Ошибка генерации. Попробуйте еще раз.");
+    } catch (error: any) {
+      console.error("Generation Error:", error);
+      const errorMessage = error.message || "Неизвестная ошибка";
+      alert(`Ошибка генерации: ${errorMessage}. Проверьте API ключ и соединение.`);
     } finally {
       setLoadingStage(-1);
     }

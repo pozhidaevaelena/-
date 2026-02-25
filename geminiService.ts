@@ -2,7 +2,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "./types";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+const getAI = () => {
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("API ключ не найден. Проверьте настройки окружения (GEMINI_API_KEY).");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 // Функция для конвертации файла в base64
 const fileToGenerativePart = async (file: File) => {
@@ -83,7 +89,7 @@ export const generateContentPlan = async (
   Верни результат как JSON массив объектов.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
