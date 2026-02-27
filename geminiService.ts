@@ -89,7 +89,7 @@ export const generateContentPlan = async (
   Верни результат как JSON массив объектов.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
+    model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -114,10 +114,15 @@ export const generateContentPlan = async (
   if (!response.text) throw new Error("Empty AI plan response");
   const rawPosts = JSON.parse(response.text);
   
-  // Для каждого поста генерируем уникальное изображение
-  const postsWithImages = await Promise.all(rawPosts.map(async (p: any, index: number) => {
+  // Для каждого поста генерируем уникальное изображение последовательно, чтобы не превысить лимиты (429)
+  const postsWithImages = [];
+  for (let index = 0; index < rawPosts.length; index++) {
+    const p = rawPosts[index];
     let imageUrl = '';
     try {
+      // Небольшая задержка между запросами для бесплатного тарифа
+      if (index > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+
       const imgResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
@@ -142,15 +147,15 @@ export const generateContentPlan = async (
       imageUrl = `https://picsum.photos/seed/${Math.random()}/800/800`;
     }
 
-    return {
+    postsWithImages.push({
       ...p,
       id: Math.random().toString(36).substr(2, 9),
       date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toLocaleDateString('ru-RU'),
       status: PostStatus.PENDING,
       editCount: 0,
       imageUrl
-    };
-  }));
+    });
+  }
 
   return postsWithImages;
 };
