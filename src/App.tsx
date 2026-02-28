@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [history, setHistory] = useState<ContentHistoryItem[]>([]);
   const [isTelegram, setIsTelegram] = useState(false);
+  const generationIdRef = React.useRef<number>(0);
 
   useEffect(() => {
     if (window.Telegram?.WebApp) {
@@ -62,15 +63,19 @@ const App: React.FC = () => {
 
     try {
       setLoadingStage(0);
+      const currentGenId = ++generationIdRef.current;
       
       // 1. Анализ ниши
       const analysis = await generateAnalysis(data.niche, data.goal);
+      if (currentGenId !== generationIdRef.current) return;
+      
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       setLoadingStage(2);
       
       // 2. Генерация текстового плана
       const posts = await generateContentPlan(data.niche, data.period, data.tone, data.goal, analysis, history);
+      if (currentGenId !== generationIdRef.current) return;
       
       const newPlan: ContentPlan = {
         niche: data.niche,
@@ -92,13 +97,17 @@ const App: React.FC = () => {
 
       // 3. Фоновая генерация изображений
       for (const post of posts) {
+        if (currentGenId !== generationIdRef.current) break;
+        
         try {
           // Небольшая задержка между запросами для соблюдения лимитов
-          await new Promise(resolve => setTimeout(resolve, 4000));
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          if (currentGenId !== generationIdRef.current) break;
+
           const imageUrl = await generateImageForPost(post, data.tone, data.files);
           
           setPlan(prev => {
-            if (!prev) return null;
+            if (!prev || currentGenId !== generationIdRef.current) return prev;
             return {
               ...prev,
               posts: prev.posts.map(p => p.id === post.id ? { ...p, imageUrl } : p)

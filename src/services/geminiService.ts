@@ -43,7 +43,7 @@ const fileToGenerativePart = async (file: File) => {
 
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
-  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}". 
+  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}" с использованием поиска Google. 
   1. Определи 3 ключевых сегмента конкурентов и их сильные стороны.
   2. Выдели 3 актуальных визуальных и контентных тренда в этой нише на текущий год.
   3. Сформулируй стратегию контента в 3 емких предложениях, которая поможет достичь цели.
@@ -56,9 +56,10 @@ export const generateAnalysis = async (niche: string, goal: ContentGoal): Promis
   }`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
+      tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -103,11 +104,13 @@ export const generateContentPlan = async (
   2. Type: Post, Reels или Story.
   3. Content: Текст на русском (минимум 300 символов).
   4. Script: Сценарий (для видео).
-  5. ImagePrompt: ОЧЕНЬ ПОДРОБНОЕ описание визуальной сцены на АНГЛИЙСКОМ. 
-     - Описывай людей, их действия, еду, объекты, фон и освещение.
-     - Если пост про шашлык — опиши сочное мясо, дым, огонь, счастливых людей на фоне.
-     - Если пост про психологию — опиши глубокие эмоции, контакт глаз, уютную атмосферу.
-     - ЗАПРЕЩЕНО: Рисовать пустые стены, абстракции или просто интерьеры без людей, если это не требуется по смыслу.
+  5. ImagePrompt: ГИПЕР-РЕАЛИСТИЧНОЕ описание визуальной сцены на АНГЛИЙСКОМ. 
+     - Описывай ПРЯМОЙ ПРЕДМЕТ из текста поста как ГЛАВНЫЙ ОБЪЕКТ.
+     - Если в тексте "шашлык" — ПЕРВЫМ СЛОВОМ должно быть "Juicy grilled meat skewers".
+     - Если в тексте "улыбки гостей" — ПЕРВЫМ СЛОВОМ должно быть "Happy people laughing".
+     - Описывай текстуры, освещение, фон и атмосферу.
+     - ЗАПРЕЩЕНО: Использовать абстрактные понятия или скучные фоны (стены, пустые комнаты).
+     - СТИЛЬ: Professional food/lifestyle photography, sharp focus, vibrant colors.
   
   Верни результат как JSON массив объектов.`;
 
