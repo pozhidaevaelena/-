@@ -96,20 +96,22 @@ export const generateContentPlan = async (
   Данные анализа рынка: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
   ${historyPrompt}
   
-  Для каждого поста:
-  1. Напиши цепляющий заголовок (title).
-  2. Определи тип (Post, Reels, Story).
-  3. Напиши основной текст (content) на русском языке.
-  4. Если это Reels или Story, напиши сценарий (script).
-  5. Сгенерируй ВИЗУАЛЬНЫЙ ПРОМПТ (imagePrompt) на АНГЛИЙСКОМ языке. 
-     ВАЖНО: Это должен быть не просто заголовок, а описание ВИЗУАЛЬНОЙ МЕТАФОРЫ. 
-     Например, если пост про "рост бизнеса", не пиши "график роста", а напиши "A powerful green sprout breaking through a concrete floor, cinematic lighting, macro photography". 
-     Описание должно быть чисто визуальным, без упоминания текста или букв.
+  ДЛЯ КАЖДОГО ПОСТА ОБЯЗАТЕЛЬНО:
+  1. Title: Цепляющий заголовок.
+  2. Type: Post, Reels или Story.
+  3. Content: Глубокий текст на русском.
+  4. Script: Сценарий (для видео).
+  5. ImagePrompt: ДЕТАЛЬНОЕ описание образа на АНГЛИЙСКОМ. 
+     ПРАВИЛО: Образ должен НАПРЯМУЮ визуализировать тему поста. 
+     - Если пост про отношения: покажи пару, их эмоции, жесты рук.
+     - Если пост про кейс: покажи результат или процесс трансформации через метафору.
+     - ЗАПРЕЩЕНО: Использовать случайные "lifestyle" картинки (кофе, пустые офисы, ноутбуки), если они не являются темой поста.
+     - СТИЛЬ: Cinematic, high-end photography, emotional lighting.
   
   Верни результат как JSON массив объектов.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.1-pro-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
