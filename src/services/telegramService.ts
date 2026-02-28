@@ -1,5 +1,5 @@
 
-import { Post } from "./types";
+import { Post } from "../types";
 
 export const sendToTelegram = async (botToken: string, chatId: string, posts: Post[]): Promise<boolean> => {
   try {

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AnalysisData } from './types';
+import { AnalysisData } from '../types';
 
 interface Props {
   data: AnalysisData;

@@ -1,4 +1,3 @@
-
 export enum Period {
   WEEK = 'Неделя',
   MONTH = 'Месяц'

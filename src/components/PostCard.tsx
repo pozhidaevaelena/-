@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Post, PostStatus } from './types';
+import { Post, PostStatus } from '../types';
 
 interface Props {
   post: Post;

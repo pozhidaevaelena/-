@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Period, ToneOfVoice, ContentGoal } from './types';
+import { Period, ToneOfVoice, ContentGoal } from '../types';
 
 interface Props {
   onSubmit: (data: { niche: string, period: Period, tone: ToneOfVoice, goal: ContentGoal, files: File[] }) => void;
@@ -33,7 +32,7 @@ const WizardForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
           FACTORY ENGINE v6.0 • ULTRA POWERED
         </div>
         <h1 className="text-6xl md:text-7xl font-black mb-4 gradient-text tracking-tighter italic filter drop-shadow-2xl">
-          ContentFactory
+          Контент завод
         </h1>
         <p className="text-slate-400 font-bold leading-relaxed max-w-md mx-auto text-[10px] uppercase tracking-[0.25em] opacity-70">
           Интеллектуальный конвейер вирального контента
@@ -41,7 +40,6 @@ const WizardForm: React.FC<Props> = ({ onSubmit, isLoading }) => {
       </div>
 
       <div className="glass p-8 md:p-12 rounded-[3rem] space-y-8 neon-border relative overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.3)]">
-        {/* Экстремальные декоративные свечения */}
         <div className="absolute -top-32 -right-32 w-80 h-80 bg-cyan-500/15 blur-[120px] rounded-full animate-pulse"></div>
         <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-indigo-600/15 blur-[120px] rounded-full animate-pulse"></div>
 

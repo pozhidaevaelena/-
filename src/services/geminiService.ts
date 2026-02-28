@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "./types";
+import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "../types";
 
 const getAI = () => {
   const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
@@ -8,6 +8,25 @@ const getAI = () => {
     throw new Error("API ключ не найден. Проверьте настройки окружения (GEMINI_API_KEY).");
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// Хелпер для повторных попыток при ошибке 429
+const fetchWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 2000): Promise<any> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries > 0 && (
+      error.message?.includes('429') || 
+      error.status === 429 || 
+      error.message?.includes('RESOURCE_EXHAUSTED') ||
+      error.message?.includes('Quota')
+    )) {
+      console.warn(`Quota hit, retrying in ${delay}ms... (${retries} left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchWithRetry(fn, retries - 1, delay * 2);
+    }
+    throw error;
+  }
 };
 
 // Функция для конвертации файла в base64
@@ -22,28 +41,24 @@ const fileToGenerativePart = async (file: File) => {
   };
 };
 
-export const generateAnalysis = async (niche: string): Promise<AnalysisData> => {
+export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
-  const prompt = `Проведи глубокий анализ ниши "${niche}" на русском языке. 
-  Найди 3 основных конкурентов, актуальные новости и тренды на текущий момент. 
-  Определи, какой контент получает больше всего откликов.`;
+  const prompt = `Проведи глубокий анализ ниши "${niche}" на русском языке с учетом цели: "${goal}". 
+  Используй поиск Google, чтобы найти 3 реальных основных конкурентов, актуальные новости за последнюю неделю и тренды. 
+  Определи, какой контент сейчас получает больше всего охватов и конверсий для этой цели.
+  
+  ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
+  {
+    "competitors": ["название1", "название2", "название3"],
+    "trends": ["тренд1", "тренд2", "тренд3"],
+    "summary": "краткая стратегия"
+  }`;
 
-  const response = await ai.models.generateContent({
+  const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
       tools: [{ googleSearch: {} }],
-    },
-  });
-
-  const structuredResponse = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: `Преврати этот анализ в JSON объект с полями: 
-    competitors (массив), 
-    trends (массив), 
-    summary (текст). 
-    Анализ: ${response.text}`,
-    config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -55,10 +70,10 @@ export const generateAnalysis = async (niche: string): Promise<AnalysisData> => 
         required: ["competitors", "trends", "summary"]
       }
     }
-  });
+  }));
 
-  if (!structuredResponse.text) throw new Error("Empty AI response");
-  return JSON.parse(structuredResponse.text);
+  if (!response.text) throw new Error("Empty AI response during analysis");
+  return JSON.parse(response.text);
 };
 
 export const generateContentPlan = async (
@@ -81,14 +96,12 @@ export const generateContentPlan = async (
   const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
   Цель: ${goal}. 
   Стиль (ToV): ${tone}.
-  Тренды: ${analysis.trends.join(', ')}.
+  Данные анализа рынка: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
   ${historyPrompt}
   Сделай контент максимально специфичным именно для этой ниши. 
-  Если цель "Продажи" - делай упор на боли и решение. 
-  Если "Доверие" - на кейсы и экспертность.
   Верни результат как JSON массив объектов.`;
 
-  const response = await ai.models.generateContent({
+  const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
@@ -103,13 +116,13 @@ export const generateContentPlan = async (
             content: { type: Type.STRING },
             script: { type: Type.STRING },
             day: { type: Type.NUMBER },
-            imagePrompt: { type: Type.STRING, description: "Detailed description for image generation" }
+            imagePrompt: { type: Type.STRING }
           },
           required: ["title", "type", "content", "day", "imagePrompt"]
         }
       }
     }
-  });
+  }));
 
   if (!response.text) throw new Error("Empty AI plan response");
   const rawPosts = JSON.parse(response.text);
@@ -121,20 +134,21 @@ export const generateContentPlan = async (
     let imageUrl = '';
     try {
       // Небольшая задержка между запросами для бесплатного тарифа
-      if (index > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+      if (index > 0) await new Promise(resolve => setTimeout(resolve, 3000));
 
-      const imgResponse = await ai.models.generateContent({
+      const parts: any[] = [];
+      if (userFiles.length > 0) {
+        parts.push(await fileToGenerativePart(userFiles[index % userFiles.length]));
+      }
+      parts.push({ text: `Generate a high-quality unique image for a social media post. Topic: ${p.title}. Description: ${p.imagePrompt}. Ensure the style is ${tone}. ${userFiles.length > 0 ? "Incorporate the visual style/elements from the provided image." : ""}` });
+
+      const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: [
-            ...(userFiles.length > 0 ? [await fileToGenerativePart(userFiles[index % userFiles.length])] : []),
-            { text: `Generate a high-quality unique image for a social media post. Topic: ${p.title}. Description: ${p.imagePrompt}. Ensure the style is ${tone}. ${userFiles.length > 0 ? "Incorporate the visual style/elements from the provided image." : ""}` }
-          ]
-        },
+        contents: { parts },
         config: {
           imageConfig: { aspectRatio: "1:1" }
         }
-      });
+      }));
 
       for (const part of imgResponse.candidates[0].content.parts) {
         if (part.inlineData) {
@@ -166,7 +180,7 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
   Учти предыдущий контент: ${post.content}. 
   Верни обновленный JSON объект.`;
 
-  const response = await ai.models.generateContent({
+  const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
@@ -181,7 +195,7 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
         required: ["content"]
       }
     }
-  });
+  }));
 
   if (!response.text) throw new Error("Empty AI edit response");
   const updated = JSON.parse(response.text);
@@ -189,11 +203,11 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
   // При редактировании тоже обновляем картинку
   let newImageUrl = post.imageUrl;
   try {
-     const imgUpdate = await ai.models.generateContent({
+     const imgUpdate = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: `Update/Generate a new image for: ${updated.imagePrompt || post.title}. Feedback: ${feedback}`,
         config: { imageConfig: { aspectRatio: "1:1" } }
-     });
+     }));
      for (const part of imgUpdate.candidates[0].content.parts) {
         if (part.inlineData) {
           newImageUrl = `data:image/png;base64,${part.inlineData.data}`;
