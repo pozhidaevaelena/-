@@ -1,0 +1,8 @@
+{
+  "name": "ContentFactory AI",
+  "description": "Автоматизированный завод контента для экспертов и менеджеров. Анализ конкурентов, трендов и создание постов под ключ с системой согласования через Telegram Mini App.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
