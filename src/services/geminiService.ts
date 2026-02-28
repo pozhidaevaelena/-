@@ -11,19 +11,21 @@ const getAI = () => {
 };
 
 // Хелпер для повторных попыток при ошибке 429
-const fetchWithRetry = async (fn: () => Promise<any>, retries = 3, delay = 2000): Promise<any> => {
+const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 5000): Promise<any> => {
   try {
     return await fn();
   } catch (error: any) {
-    if (retries > 0 && (
+    const isQuotaError = 
       error.message?.includes('429') || 
       error.status === 429 || 
       error.message?.includes('RESOURCE_EXHAUSTED') ||
-      error.message?.includes('Quota')
-    )) {
+      error.message?.includes('Quota') ||
+      error.message?.includes('limit');
+
+    if (retries > 0 && isQuotaError) {
       console.warn(`Quota hit, retrying in ${delay}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return fetchWithRetry(fn, retries - 1, delay * 2);
+      return fetchWithRetry(fn, retries - 1, delay * 1.5);
     }
     throw error;
   }
@@ -45,13 +47,13 @@ export const generateAnalysis = async (niche: string, goal: ContentGoal): Promis
   const ai = getAI();
   const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}".
   ИСПОЛЬЗУЙ ПОИСК GOOGLE ДЛЯ СЛЕДУЮЩИХ ЗАДАЧ:
-  1. Найди 3-5 популярных Telegram-каналов конкурентов в этой нише. 
-  2. Проанализируй, какие типы постов у них набирают больше всего реакций и комментариев (кейсы, советы, юмор, новости).
-  3. Найди последние важные новости и инфоповоды в нише "${niche}" за последние 7-14 дней.
+  1. Найди 3-5 популярных Telegram-каналов конкурентов именно в нише "${niche}". 
+  2. Проанализируй их контент: какие посты (кейсы, советы, новости, юмор) собирают больше всего реакций и комментариев.
+  3. Найди последние новости и инфоповоды в нише "${niche}" за последние 7-14 дней.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["название канала 1 (что заходит)", "название канала 2 (что заходит)", "название канала 3 (что заходит)"],
+    "competitors": ["название канала 1 (описание что заходит)", "название канала 2 (описание что заходит)", "название канала 3 (описание что заходит)"],
     "trends": ["новость/тренд 1", "новость/тренд 2", "новость/тренд 3"],
     "summary": "Стратегия на основе анализа конкурентов в Telegram и свежих новостей."
   }`;
@@ -72,7 +74,7 @@ export const generateAnalysis = async (niche: string, goal: ContentGoal): Promis
         required: ["competitors", "trends", "summary"]
       }
     }
-  }));
+  }), 5, 8000); // Больше попыток и задержка для поиска
 
   if (!response.text) throw new Error("Empty AI response during analysis");
   return JSON.parse(response.text);

@@ -120,7 +120,11 @@ const App: React.FC = () => {
 
     } catch (error: any) {
       console.error("Generation error:", error);
-      alert(`Ошибка генерации: ${error.message || JSON.stringify(error)}. Проверьте API ключ и соединение.`);
+      const isQuota = error.message?.includes('429') || error.message?.includes('Quota') || error.message?.includes('RESOURCE_EXHAUSTED');
+      const msg = isQuota 
+        ? "Превышена квота API (ошибка 429). Пожалуйста, подождите 1-2 минуты или проверьте лимиты вашего API ключа в Google AI Studio. Если вы используете бесплатный тариф, такие ошибки могут возникать при частом использовании поиска."
+        : `Ошибка генерации: ${error.message || JSON.stringify(error)}. Проверьте API ключ и соединение.`;
+      alert(msg);
       setLoadingStage(-1);
     }
   };
