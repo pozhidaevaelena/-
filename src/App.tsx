@@ -100,8 +100,8 @@ const App: React.FC = () => {
         if (currentGenId !== generationIdRef.current) break;
         
         try {
-          // Небольшая задержка между запросами для соблюдения лимитов
-          await new Promise(resolve => setTimeout(resolve, 5000));
+          // Увеличиваем задержку до 7 секунд для гарантированного обхода лимитов 429
+          await new Promise(resolve => setTimeout(resolve, 7000));
           if (currentGenId !== generationIdRef.current) break;
 
           const imageUrl = await generateImageForPost(post, data.tone, data.files);

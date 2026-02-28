@@ -43,16 +43,17 @@ const fileToGenerativePart = async (file: File) => {
 
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
-  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}" с использованием поиска Google. 
-  1. Определи 3 ключевых сегмента конкурентов и их сильные стороны.
-  2. Выдели 3 актуальных визуальных и контентных тренда в этой нише на текущий год.
-  3. Сформулируй стратегию контента в 3 емких предложениях, которая поможет достичь цели.
+  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}".
+  ИСПОЛЬЗУЙ ПОИСК GOOGLE ДЛЯ СЛЕДУЮЩИХ ЗАДАЧ:
+  1. Найди 3-5 популярных Telegram-каналов конкурентов в этой нише. 
+  2. Проанализируй, какие типы постов у них набирают больше всего реакций и комментариев (кейсы, советы, юмор, новости).
+  3. Найди последние важные новости и инфоповоды в нише "${niche}" за последние 7-14 дней.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["сегмент1", "сегмент2", "сегмент3"],
-    "trends": ["тренд1", "тренд2", "тренд3"],
-    "summary": "текст стратегии"
+    "competitors": ["название канала 1 (что заходит)", "название канала 2 (что заходит)", "название канала 3 (что заходит)"],
+    "trends": ["новость/тренд 1", "новость/тренд 2", "новость/тренд 3"],
+    "summary": "Стратегия на основе анализа конкурентов в Telegram и свежих новостей."
   }`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
@@ -159,12 +160,13 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
     }
     
     const finalImagePrompt = `
-      High-quality professional photography for social media.
-      Context: This image is for a post titled "${post.title}".
+      High-quality professional photography for a Telegram channel.
+      Context: This image is for a Telegram post titled "${post.title}".
       Post Content Summary: ${post.content.substring(0, 200)}...
       Visual Scene to Generate: ${post.imagePrompt}.
       Style: ${tone} aesthetic, vibrant colors, sharp focus, professional lighting.
       Strict Rules: NO text, NO words, NO letters, NO logos, NO distorted faces.
+      Relevance: The image MUST directly illustrate the core topic of the post (e.g., if it's about food, show the food; if it's about people, show the people).
       ${userFiles.length > 0 ? "Visual Reference: Match the color palette and mood of the attached image." : ""}
     `.trim();
 
