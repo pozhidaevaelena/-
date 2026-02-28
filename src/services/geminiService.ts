@@ -101,7 +101,10 @@ export const generateContentPlan = async (
   2. Определи тип (Post, Reels, Story).
   3. Напиши основной текст (content) на русском языке.
   4. Если это Reels или Story, напиши сценарий (script).
-  5. Сгенерируй ДЕТАЛЬНОЕ визуальное описание для картинки (imagePrompt) на АНГЛИЙСКОМ языке. Описание должно быть художественным: укажи объекты, композицию, освещение и как это визуально передает смысл поста. Избегай текста на картинке.
+  5. Сгенерируй ВИЗУАЛЬНЫЙ ПРОМПТ (imagePrompt) на АНГЛИЙСКОМ языке. 
+     ВАЖНО: Это должен быть не просто заголовок, а описание ВИЗУАЛЬНОЙ МЕТАФОРЫ. 
+     Например, если пост про "рост бизнеса", не пиши "график роста", а напиши "A powerful green sprout breaking through a concrete floor, cinematic lighting, macro photography". 
+     Описание должно быть чисто визуальным, без упоминания текста или букв.
   
   Верни результат как JSON массив объектов.`;
 
@@ -143,11 +146,17 @@ export const generateContentPlan = async (
         parts.push(await fileToGenerativePart(userFiles[index % userFiles.length]));
       }
       
-      const visualContext = `Style: ${tone}. Post Topic: ${p.title}. Post Content: ${p.content}. Visual Instructions: ${p.imagePrompt}`;
-      parts.push({ text: `Generate a high-quality unique image that perfectly illustrates this social media post. 
-      Context: ${visualContext}. 
-      Negative prompt: No text, no letters, no distorted faces, no messy hands. 
-      ${userFiles.length > 0 ? "Maintain the visual style and color palette from the provided reference image." : ""}` });
+      // Формируем максимально чистый и мощный промпт для генератора
+      const finalImagePrompt = `
+        Professional social media photography/illustration.
+        Style: ${tone} aesthetic.
+        Subject: ${p.imagePrompt}.
+        Atmosphere: High-end, cinematic lighting, sharp focus, 8k resolution.
+        Strict Rules: NO text, NO words, NO letters, NO logos, NO watermarks. 
+        ${userFiles.length > 0 ? "Visual Reference: Match the color palette and mood of the attached image." : ""}
+      `.trim();
+
+      parts.push({ text: finalImagePrompt });
 
       const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
@@ -210,10 +219,16 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
   // При редактировании тоже обновляем картинку
   let newImageUrl = post.imageUrl;
   try {
-     const visualContext = `Post Topic: ${post.title}. New Content: ${updated.content}. Feedback: ${feedback}. Visual Instructions: ${updated.imagePrompt || post.imagePrompt}`;
+     const finalEditPrompt = `
+       Professional update of a social media visual.
+       New Subject: ${updated.imagePrompt || post.imagePrompt}.
+       Feedback to incorporate: ${feedback}.
+       Style: High-quality, cinematic, no text.
+     `.trim();
+
      const imgUpdate = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: `Generate a high-quality unique image that illustrates this updated social media post. Context: ${visualContext}. Negative prompt: No text, no letters, no distorted faces.`,
+        contents: finalEditPrompt,
         config: { imageConfig: { aspectRatio: "1:1" } }
      }));
      for (const part of imgUpdate.candidates[0].content.parts) {
