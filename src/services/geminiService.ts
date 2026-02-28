@@ -44,21 +44,20 @@ const fileToGenerativePart = async (file: File) => {
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
   const prompt = `Проведи глубокий анализ ниши "${niche}" на русском языке с учетом цели: "${goal}". 
-  Используй поиск Google, чтобы найти 3 реальных основных конкурентов, актуальные новости за последнюю неделю и тренды. 
+  Определи 3 основных типа конкурентов, актуальные тренды и боли аудитории.
   Определи, какой контент сейчас получает больше всего охватов и конверсий для этой цели.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["название1", "название2", "название3"],
+    "competitors": ["тип1", "тип2", "тип3"],
     "trends": ["тренд1", "тренд2", "тренд3"],
-    "summary": "краткая стратегия"
+    "summary": "краткая стратегия на 3-4 предложения"
   }`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
-      tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
