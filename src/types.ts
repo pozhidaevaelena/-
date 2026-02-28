@@ -34,6 +34,7 @@ export interface Post {
   content: string;
   script?: string;
   imageUrl?: string;
+  imagePrompt?: string;
   status: PostStatus;
   editCount: number;
   feedback?: string;

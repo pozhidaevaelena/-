@@ -90,14 +90,19 @@ export const generateContentPlan = async (
   const relevantHistory = history.filter(h => h.niche.toLowerCase() === niche.toLowerCase()).map(h => h.title);
   const historyPrompt = relevantHistory.length > 0 
     ? `ВАЖНО: Никогда не повторяй эти темы: ${relevantHistory.join(', ')}.`
-    : "";
-
-  const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
+    : "";  const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
   Цель: ${goal}. 
   Стиль (ToV): ${tone}.
   Данные анализа рынка: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
   ${historyPrompt}
-  Сделай контент максимально специфичным именно для этой ниши. 
+  
+  Для каждого поста:
+  1. Напиши цепляющий заголовок (title).
+  2. Определи тип (Post, Reels, Story).
+  3. Напиши основной текст (content) на русском языке.
+  4. Если это Reels или Story, напиши сценарий (script).
+  5. Сгенерируй ДЕТАЛЬНОЕ визуальное описание для картинки (imagePrompt) на АНГЛИЙСКОМ языке. Описание должно быть художественным: укажи объекты, композицию, освещение и как это визуально передает смысл поста. Избегай текста на картинке.
+  
   Верни результат как JSON массив объектов.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
@@ -126,20 +131,23 @@ export const generateContentPlan = async (
   if (!response.text) throw new Error("Empty AI plan response");
   const rawPosts = JSON.parse(response.text);
   
-  // Для каждого поста генерируем уникальное изображение последовательно, чтобы не превысить лимиты (429)
   const postsWithImages = [];
   for (let index = 0; index < rawPosts.length; index++) {
     const p = rawPosts[index];
     let imageUrl = '';
     try {
-      // Небольшая задержка между запросами для бесплатного тарифа
       if (index > 0) await new Promise(resolve => setTimeout(resolve, 3000));
 
       const parts: any[] = [];
       if (userFiles.length > 0) {
         parts.push(await fileToGenerativePart(userFiles[index % userFiles.length]));
       }
-      parts.push({ text: `Generate a high-quality unique image for a social media post. Topic: ${p.title}. Description: ${p.imagePrompt}. Ensure the style is ${tone}. ${userFiles.length > 0 ? "Incorporate the visual style/elements from the provided image." : ""}` });
+      
+      const visualContext = `Style: ${tone}. Post Topic: ${p.title}. Post Content: ${p.content}. Visual Instructions: ${p.imagePrompt}`;
+      parts.push({ text: `Generate a high-quality unique image that perfectly illustrates this social media post. 
+      Context: ${visualContext}. 
+      Negative prompt: No text, no letters, no distorted faces, no messy hands. 
+      ${userFiles.length > 0 ? "Maintain the visual style and color palette from the provided reference image." : ""}` });
 
       const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
@@ -202,9 +210,10 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
   // При редактировании тоже обновляем картинку
   let newImageUrl = post.imageUrl;
   try {
+     const visualContext = `Post Topic: ${post.title}. New Content: ${updated.content}. Feedback: ${feedback}. Visual Instructions: ${updated.imagePrompt || post.imagePrompt}`;
      const imgUpdate = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: `Update/Generate a new image for: ${updated.imagePrompt || post.title}. Feedback: ${feedback}`,
+        contents: `Generate a high-quality unique image that illustrates this updated social media post. Context: ${visualContext}. Negative prompt: No text, no letters, no distorted faces.`,
         config: { imageConfig: { aspectRatio: "1:1" } }
      }));
      for (const part of imgUpdate.candidates[0].content.parts) {
@@ -219,6 +228,7 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
     ...post,
     content: updated.content,
     script: updated.script || post.script,
+    imagePrompt: updated.imagePrompt || post.imagePrompt,
     imageUrl: newImageUrl,
     editCount: post.editCount + 1,
     status: PostStatus.PENDING
