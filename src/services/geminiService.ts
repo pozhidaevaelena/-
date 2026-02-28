@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
 import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "../types";
 
 const getAI = () => {
@@ -102,19 +102,21 @@ export const generateContentPlan = async (
   3. Content: Глубокий текст на русском.
   4. Script: Сценарий (для видео).
   5. ImagePrompt: ДЕТАЛЬНОЕ описание образа на АНГЛИЙСКОМ. 
-     ПРАВИЛО: Образ должен НАПРЯМУЮ визуализировать тему поста. 
-     - Если пост про отношения: покажи пару, их эмоции, жесты рук.
-     - Если пост про кейс: покажи результат или процесс трансформации через метафору.
-     - ЗАПРЕЩЕНО: Использовать случайные "lifestyle" картинки (кофе, пустые офисы, ноутбуки), если они не являются темой поста.
-     - СТИЛЬ: Cinematic, high-end photography, emotional lighting.
+     ИНСТРУКЦИЯ ПО ВИЗУАЛИЗАЦИИ:
+     - Сначала определи ГЛАВНУЮ ЭМОЦИЮ или СОБЫТИЕ поста.
+     - Создай образ, который передает это событие БЕЗ ТЕКСТА.
+     - Если пост про семейный кризис: покажи двух людей, сидящих спиной друг к другу, или разбитую вазу, которую склеивают золотом (кинцуги).
+     - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО: Кофе, ноутбуки, пустые офисы, бизнесмены в костюмах (если это не тема поста).
+     - СТИЛЬ: Cinematic photography, emotional atmosphere, realistic textures.
   
   Верни результат как JSON массив объектов.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-3.1-pro-preview',
+    model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
       responseSchema: {
         type: Type.ARRAY,
         items: {
