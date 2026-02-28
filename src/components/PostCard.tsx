@@ -5,9 +5,10 @@ interface Props {
   post: Post;
   onApprove: (id: string) => void;
   onEdit: (id: string, feedback: string) => void;
+  onRegenerateImage: (id: string) => void;
 }
 
-const PostCard: React.FC<Props> = ({ post, onApprove, onEdit }) => {
+const PostCard: React.FC<Props> = ({ post, onApprove, onEdit, onRegenerateImage }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
 
@@ -34,9 +35,26 @@ const PostCard: React.FC<Props> = ({ post, onApprove, onEdit }) => {
 
   return (
     <div className={`group glass rounded-[2.5rem] overflow-hidden transition-all duration-500 flex flex-col h-full hover:neon-border hover:-translate-y-2 ${isApproved ? 'border-cyan-500/30 bg-cyan-500/[0.05]' : ''}`}>
-      <div className="relative h-64 overflow-hidden">
-        <img src={post.imageUrl} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+      <div className="relative h-64 overflow-hidden bg-slate-900 flex items-center justify-center">
+        {post.imageUrl ? (
+          <img src={post.imageUrl} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+        ) : (
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-cyan-500/20 border-t-cyan-500 rounded-full animate-spin"></div>
+            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Создание визуала...</span>
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-60"></div>
+        
+        {post.imageUrl && (
+          <button 
+            onClick={() => onRegenerateImage(post.id)}
+            className="absolute bottom-4 right-4 p-2.5 bg-slate-900/80 backdrop-blur-xl rounded-xl text-slate-400 hover:text-cyan-400 transition-all border border-white/10 opacity-0 group-hover:opacity-100"
+            title="Перегенерировать изображение"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          </button>
+        )}
         
         <div className="absolute top-6 left-6 flex gap-2">
           <div className="bg-slate-900/80 backdrop-blur-xl px-4 py-1.5 rounded-2xl text-[10px] font-black text-white uppercase tracking-widest border border-white/10">

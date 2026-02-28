@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "../types";
 
 const getAI = () => {
@@ -43,19 +43,20 @@ const fileToGenerativePart = async (file: File) => {
 
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
-  const prompt = `Проведи глубокий анализ ниши "${niche}" на русском языке с учетом цели: "${goal}". 
-  Определи 3 основных типа конкурентов, актуальные тренды и боли аудитории.
-  Определи, какой контент сейчас получает больше всего охватов и конверсий для этой цели.
+  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}". 
+  1. Определи 3 ключевых сегмента конкурентов и их сильные стороны.
+  2. Выдели 3 актуальных визуальных и контентных тренда в этой нише на текущий год.
+  3. Сформулируй стратегию контента в 3 емких предложениях, которая поможет достичь цели.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["тип1", "тип2", "тип3"],
+    "competitors": ["сегмент1", "сегмент2", "сегмент3"],
     "trends": ["тренд1", "тренд2", "тренд3"],
-    "summary": "краткая стратегия на 3-4 предложения"
+    "summary": "текст стратегии"
   }`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-2.5-flash',
     contents: prompt,
     config: {
       responseMimeType: "application/json",
@@ -81,8 +82,7 @@ export const generateContentPlan = async (
   tone: ToneOfVoice, 
   goal: ContentGoal,
   analysis: AnalysisData,
-  history: ContentHistoryItem[] = [],
-  userFiles: File[] = []
+  history: ContentHistoryItem[] = []
 ): Promise<Post[]> => {
   const ai = getAI();
   const days = period === Period.WEEK ? 7 : 30;
@@ -90,24 +90,24 @@ export const generateContentPlan = async (
   const relevantHistory = history.filter(h => h.niche.toLowerCase() === niche.toLowerCase()).map(h => h.title);
   const historyPrompt = relevantHistory.length > 0 
     ? `ВАЖНО: Никогда не повторяй эти темы: ${relevantHistory.join(', ')}.`
-    : "";  const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
+    : "";
+
+  const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
   Цель: ${goal}. 
   Стиль (ToV): ${tone}.
-  Данные анализа рынка: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
+  Данные анализа: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
   ${historyPrompt}
   
   ДЛЯ КАЖДОГО ПОСТА ОБЯЗАТЕЛЬНО:
-  1. Title: Цепляющий заголовок.
+  1. Title: Заголовок.
   2. Type: Post, Reels или Story.
-  3. Content: Глубокий текст на русском.
+  3. Content: Текст на русском (минимум 300 символов).
   4. Script: Сценарий (для видео).
-  5. ImagePrompt: ДЕТАЛЬНОЕ описание образа на АНГЛИЙСКОМ. 
-     ИНСТРУКЦИЯ ПО ВИЗУАЛИЗАЦИИ:
-     - Сначала определи ГЛАВНУЮ ЭМОЦИЮ или СОБЫТИЕ поста.
-     - Создай образ, который передает это событие БЕЗ ТЕКСТА.
-     - Если пост про семейный кризис: покажи двух людей, сидящих спиной друг к другу, или разбитую вазу, которую склеивают золотом (кинцуги).
-     - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО: Кофе, ноутбуки, пустые офисы, бизнесмены в костюмах (если это не тема поста).
-     - СТИЛЬ: Cinematic photography, emotional atmosphere, realistic textures.
+  5. ImagePrompt: ОЧЕНЬ ПОДРОБНОЕ описание визуальной сцены на АНГЛИЙСКОМ. 
+     - Описывай людей, их действия, еду, объекты, фон и освещение.
+     - Если пост про шашлык — опиши сочное мясо, дым, огонь, счастливых людей на фоне.
+     - Если пост про психологию — опиши глубокие эмоции, контакт глаз, уютную атмосферу.
+     - ЗАПРЕЩЕНО: Рисовать пустые стены, абстракции или просто интерьеры без людей, если это не требуется по смыслу.
   
   Верни результат как JSON массив объектов.`;
 
@@ -137,60 +137,54 @@ export const generateContentPlan = async (
   if (!response.text) throw new Error("Empty AI plan response");
   const rawPosts = JSON.parse(response.text);
   
-  const postsWithImages = [];
-  for (let index = 0; index < rawPosts.length; index++) {
-    const p = rawPosts[index];
-    let imageUrl = '';
-    try {
-      if (index > 0) await new Promise(resolve => setTimeout(resolve, 3000));
+  return rawPosts.map((p: any) => ({
+    ...p,
+    id: Math.random().toString(36).substr(2, 9),
+    date: new Date(Date.now() + (p.day - 1) * 24 * 60 * 60 * 1000).toLocaleDateString('ru-RU'),
+    status: PostStatus.PENDING,
+    editCount: 0,
+    imageUrl: '' // Будет сгенерировано позже
+  }));
+};
 
-      const parts: any[] = [];
-      if (userFiles.length > 0) {
-        parts.push(await fileToGenerativePart(userFiles[index % userFiles.length]));
-      }
-      
-      // Формируем максимально чистый и мощный промпт для генератора
-      const finalImagePrompt = `
-        Professional social media photography/illustration.
-        Style: ${tone} aesthetic.
-        Subject: ${p.imagePrompt}.
-        Atmosphere: High-end, cinematic lighting, sharp focus, 8k resolution.
-        Strict Rules: NO text, NO words, NO letters, NO logos, NO watermarks. 
-        ${userFiles.length > 0 ? "Visual Reference: Match the color palette and mood of the attached image." : ""}
-      `.trim();
-
-      parts.push({ text: finalImagePrompt });
-
-      const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: { parts },
-        config: {
-          imageConfig: { aspectRatio: "1:1" }
-        }
-      }));
-
-      for (const part of imgResponse.candidates[0].content.parts) {
-        if (part.inlineData) {
-          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn("Image gen failed for post", index, e);
-      imageUrl = `https://picsum.photos/seed/${Math.random()}/800/800`;
+export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFiles: File[] = []): Promise<string> => {
+  const ai = getAI();
+  try {
+    const parts: any[] = [];
+    if (userFiles.length > 0) {
+      parts.push(await fileToGenerativePart(userFiles[Math.floor(Math.random() * userFiles.length)]));
     }
+    
+    const finalImagePrompt = `
+      High-quality professional photography for social media.
+      Context: This image is for a post titled "${post.title}".
+      Post Content Summary: ${post.content.substring(0, 200)}...
+      Visual Scene to Generate: ${post.imagePrompt}.
+      Style: ${tone} aesthetic, vibrant colors, sharp focus, professional lighting.
+      Strict Rules: NO text, NO words, NO letters, NO logos, NO distorted faces.
+      ${userFiles.length > 0 ? "Visual Reference: Match the color palette and mood of the attached image." : ""}
+    `.trim();
 
-    postsWithImages.push({
-      ...p,
-      id: Math.random().toString(36).substr(2, 9),
-      date: new Date(Date.now() + index * 24 * 60 * 60 * 1000).toLocaleDateString('ru-RU'),
-      status: PostStatus.PENDING,
-      editCount: 0,
-      imageUrl
-    });
+    parts.push({ text: finalImagePrompt });
+
+    const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: { parts },
+      config: {
+        imageConfig: { aspectRatio: "1:1" }
+      }
+    }));
+
+    for (const part of imgResponse.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:image/png;base64,${part.inlineData.data}`;
+      }
+    }
+    throw new Error("No image data in response");
+  } catch (e) {
+    console.error("Image generation failed", e);
+    return `https://picsum.photos/seed/${post.id}/800/800`;
   }
-
-  return postsWithImages;
 };
 
 export const editPostContent = async (post: Post, feedback: string): Promise<Post> => {

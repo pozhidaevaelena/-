@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Post, Period, ToneOfVoice, ContentGoal, ContentPlan, PostStatus, ContentHistoryItem } from './types';
-import { generateAnalysis, generateContentPlan, editPostContent } from './services/geminiService';
+import { generateAnalysis, generateContentPlan, editPostContent, generateImageForPost } from './services/geminiService';
 import { sendToTelegram } from './services/telegramService';
 import WizardForm from './components/WizardForm';
 import PostCard from './components/PostCard';
@@ -58,23 +58,20 @@ const App: React.FC = () => {
   ];
 
   const handleFormSubmit = async (data: { niche: string, period: Period, tone: ToneOfVoice, goal: ContentGoal, files: File[] }) => {
-    if (loadingStage >= 0) return; // Защита от двойного клика
+    if (loadingStage >= 0) return;
 
     try {
       setLoadingStage(0);
       
       // 1. Анализ ниши
       const analysis = await generateAnalysis(data.niche, data.goal);
-      
-      // Небольшая пауза между этапами для стабильности API
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       setLoadingStage(2);
       
-      // 2. Генерация плана
-      const posts = await generateContentPlan(data.niche, data.period, data.tone, data.goal, analysis, history, data.files);
-      setLoadingStage(4);
-
+      // 2. Генерация текстового плана
+      const posts = await generateContentPlan(data.niche, data.period, data.tone, data.goal, analysis, history);
+      
       const newPlan: ContentPlan = {
         niche: data.niche,
         period: data.period,
@@ -93,10 +90,59 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('cf_content_history', JSON.stringify(newHistory.slice(-100)));
 
+      // 3. Фоновая генерация изображений
+      for (const post of posts) {
+        try {
+          // Небольшая задержка между запросами для соблюдения лимитов
+          await new Promise(resolve => setTimeout(resolve, 4000));
+          const imageUrl = await generateImageForPost(post, data.tone, data.files);
+          
+          setPlan(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              posts: prev.posts.map(p => p.id === post.id ? { ...p, imageUrl } : p)
+            };
+          });
+        } catch (e) {
+          console.error(`Failed to generate image for post ${post.id}`, e);
+        }
+      }
+
     } catch (error: any) {
       console.error("Generation error:", error);
       alert(`Ошибка генерации: ${error.message || JSON.stringify(error)}. Проверьте API ключ и соединение.`);
       setLoadingStage(-1);
+    }
+  };
+
+  const handleRegenerateImage = async (postId: string) => {
+    if (!plan) return;
+    const post = plan.posts.find(p => p.id === postId);
+    if (!post) return;
+
+    // Сбрасываем текущую картинку, чтобы показать лоадер
+    setPlan(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        posts: prev.posts.map(p => p.id === postId ? { ...p, imageUrl: '' } : p)
+      };
+    });
+
+    try {
+      // Для регенерации используем пустой массив файлов, если не переданы новые, 
+      // или можно расширить логику для передачи файлов из состояния
+      const imageUrl = await generateImageForPost(post, plan.tone, []);
+      setPlan(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          posts: prev.posts.map(p => p.id === postId ? { ...p, imageUrl } : p)
+        };
+      });
+    } catch (error) {
+      alert("Не удалось перегенерировать изображение.");
     }
   };
 
@@ -204,6 +250,7 @@ const App: React.FC = () => {
                 post={post}
                 onApprove={approvePost}
                 onEdit={handleEditPost}
+                onRegenerateImage={handleRegenerateImage}
               />
             ))}
           </div>
