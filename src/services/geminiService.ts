@@ -10,20 +10,27 @@ const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-// Хелпер для повторных попыток при ошибке 429
+// Хелпер для повторных попыток при ошибках API или сети
 const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 5000): Promise<any> => {
   try {
     return await fn();
   } catch (error: any) {
+    const errorMessage = error.message || String(error);
     const isQuotaError = 
-      error.message?.includes('429') || 
+      errorMessage.includes('429') || 
       error.status === 429 || 
-      error.message?.includes('RESOURCE_EXHAUSTED') ||
-      error.message?.includes('Quota') ||
-      error.message?.includes('limit');
+      errorMessage.includes('RESOURCE_EXHAUSTED') ||
+      errorMessage.includes('Quota') ||
+      errorMessage.includes('limit');
+    
+    const isNetworkError = 
+      errorMessage.includes('Failed to fetch') || 
+      errorMessage.includes('NetworkError') ||
+      errorMessage.includes('fetch');
 
-    if (retries > 0 && isQuotaError) {
-      console.warn(`Quota hit, retrying in ${delay}ms... (${retries} left)`);
+    if (retries > 0 && (isQuotaError || isNetworkError)) {
+      const type = isQuotaError ? 'Quota' : 'Network';
+      console.warn(`${type} error hit: ${errorMessage}. Retrying in ${delay}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return fetchWithRetry(fn, retries - 1, delay * 1.5);
     }
@@ -53,10 +60,12 @@ export const generateAnalysis = async (niche: string, goal: ContentGoal): Promis
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["название канала 1 (описание что заходит)", "название канала 2 (описание что заходит)", "название канала 3 (описание что заходит)"],
-    "trends": ["новость/тренд 1", "новость/тренд 2", "новость/тренд 3"],
+    "competitors": ["@username или t.me/link (описание что заходит)", "@username или t.me/link (описание что заходит)", "@username или t.me/link (описание что заходит)"],
+    "trends": ["конкретная новость/тренд 1", "конкретная новость/тренд 2", "конкретная новость/тренд 3"],
     "summary": "Стратегия на основе анализа конкурентов в Telegram и свежих новостей."
-  }`;
+  }
+  
+  ОБЯЗАТЕЛЬНО: В поле competitors должны быть именно ссылки или юзернеймы Telegram-каналов.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',

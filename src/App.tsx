@@ -51,9 +51,9 @@ const App: React.FC = () => {
   }, []);
 
   const loadingSteps = [
-    "Глубокий анализ ниши и конкурентов...",
-    "Проверка истории для исключения дублей...",
-    "Определение стратегии под вашу цель...",
+    "Глубокий анализ ниши и конкурентов в Telegram...",
+    "Проверка истории и исключение повторов...",
+    "Определение стратегии на основе новостей...",
     "Генерация уникального плана и сценариев...",
     "Создание и адаптация визуального ряда..."
   ];
@@ -213,7 +213,7 @@ const App: React.FC = () => {
               {loadingSteps[loadingStage]}
             </h2>
             <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">
-              Нейросеть Gemini Flash 2.5 создает ваш контент...
+              Нейросеть Gemini 3 создает ваш контент...
             </p>
           </div>
           <div className="absolute bottom-12 w-64 h-1 bg-slate-900 rounded-full overflow-hidden">
