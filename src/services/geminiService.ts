@@ -52,20 +52,20 @@ const fileToGenerativePart = async (file: File) => {
 
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
-  const prompt = `Проведи глубокий маркетинговый анализ ниши "${niche}" для цели: "${goal}".
-  ИСПОЛЬЗУЙ ПОИСК GOOGLE ДЛЯ СЛЕДУЮЩИХ ЗАДАЧ:
-  1. Найди 3-5 популярных Telegram-каналов конкурентов именно в нише "${niche}". 
-  2. Проанализируй их контент: какие посты (кейсы, советы, новости, юмор) собирают больше всего реакций и комментариев.
-  3. Найди последние новости и инфоповоды в нише "${niche}" за последние 7-14 дней.
+  const prompt = `Проведи быстрый маркетинговый анализ ниши "${niche}" для цели: "${goal}".
+  ИСПОЛЬЗУЙ ПОИСК GOOGLE:
+  1. Найди 3 реальных Telegram-канала конкурентов в нише "${niche}". 
+  2. Кратко: какие посты у них популярны (кейсы, новости или советы).
+  3. Найди 3 свежих новости/тренда в этой нише за последнюю неделю.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["@username или t.me/link (описание что заходит)", "@username или t.me/link (описание что заходит)", "@username или t.me/link (описание что заходит)"],
-    "trends": ["конкретная новость/тренд 1", "конкретная новость/тренд 2", "конкретная новость/тренд 3"],
-    "summary": "Стратегия на основе анализа конкурентов в Telegram и свежих новостей."
+    "competitors": ["@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)"],
+    "trends": ["новость 1", "новость 2", "новость 3"],
+    "summary": "Краткая стратегия."
   }
   
-  ОБЯЗАТЕЛЬНО: В поле competitors должны быть именно ссылки или юзернеймы Telegram-каналов.`;
+  ОБЯЗАТЕЛЬНО: Только JSON. Минимум текста.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -127,7 +127,7 @@ export const generateContentPlan = async (
   Верни результат как JSON массив объектов.`;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: 'gemini-3-flash-preview',
     contents: prompt,
     config: {
       responseMimeType: "application/json",

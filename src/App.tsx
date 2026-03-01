@@ -69,7 +69,8 @@ const App: React.FC = () => {
       const analysis = await generateAnalysis(data.niche, data.goal);
       if (currentGenId !== generationIdRef.current) return;
       
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Искусственная задержка между этапами для защиты квот
+      await new Promise(resolve => setTimeout(resolve, 3000));
       
       setLoadingStage(2);
       
