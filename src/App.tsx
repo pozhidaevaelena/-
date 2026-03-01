@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Post, Period, ToneOfVoice, ContentGoal, ContentPlan, PostStatus, ContentHistoryItem } from './types';
-import { generateAnalysis, generateContentPlan, editPostContent, generateImageForPost } from './services/geminiService';
+import { generateFullStrategy, editPostContent, generateImageForPost } from './services/geminiService';
 import { sendToTelegram } from './services/telegramService';
 import WizardForm from './components/WizardForm';
 import PostCard from './components/PostCard';
@@ -65,18 +65,13 @@ const App: React.FC = () => {
       setLoadingStage(0);
       const currentGenId = ++generationIdRef.current;
       
-      // 1. Анализ ниши
-      const analysis = await generateAnalysis(data.niche, data.goal);
+      // 1. Генерация полной стратегии (Анализ + План) в одном запросе
+      // Это экономит квоты API, так как поиск Google выполняется один раз
+      const { analysis, posts } = await generateFullStrategy(data.niche, data.period, data.tone, data.goal, history);
+      
       if (currentGenId !== generationIdRef.current) return;
       
-      // Искусственная задержка между этапами для защиты квот
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      setLoadingStage(2);
-      
-      // 2. Генерация текстового плана
-      const posts = await generateContentPlan(data.niche, data.period, data.tone, data.goal, analysis, history);
-      if (currentGenId !== generationIdRef.current) return;
+      setLoadingStage(3); // Переходим сразу к генерации плана (она уже завершена в одном вызове)
       
       const newPlan: ContentPlan = {
         niche: data.niche,

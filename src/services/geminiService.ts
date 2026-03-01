@@ -30,9 +30,11 @@ const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 5000)
 
     if (retries > 0 && (isQuotaError || isNetworkError)) {
       const type = isQuotaError ? 'Quota' : 'Network';
+      // Для ошибок квоты увеличиваем задержку в 2 раза, для сети в 1.5
+      const nextDelay = isQuotaError ? delay * 2 : delay * 1.5;
       console.warn(`${type} error hit: ${errorMessage}. Retrying in ${delay}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return fetchWithRetry(fn, retries - 1, delay * 1.5);
+      return fetchWithRetry(fn, retries - 1, nextDelay);
     }
     throw error;
   }
@@ -50,22 +52,54 @@ const fileToGenerativePart = async (file: File) => {
   };
 };
 
-export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
+export const generateFullStrategy = async (
+  niche: string, 
+  period: Period, 
+  tone: ToneOfVoice, 
+  goal: ContentGoal,
+  history: ContentHistoryItem[] = []
+): Promise<{ analysis: AnalysisData, posts: Post[] }> => {
   const ai = getAI();
-  const prompt = `Проведи быстрый маркетинговый анализ ниши "${niche}" для цели: "${goal}".
-  ИСПОЛЬЗУЙ ПОИСК GOOGLE:
-  1. Найди 3 реальных Telegram-канала конкурентов в нише "${niche}". 
-  2. Кратко: какие посты у них популярны (кейсы, новости или советы).
-  3. Найди 3 свежих новости/тренда в этой нише за последнюю неделю.
+  const days = period === Period.WEEK ? 7 : 30;
+  const relevantHistory = history.filter(h => h.niche.toLowerCase() === niche.toLowerCase()).map(h => h.title);
   
-  ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
-  {
-    "competitors": ["@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)"],
-    "trends": ["новость 1", "новость 2", "новость 3"],
-    "summary": "Краткая стратегия."
-  }
-  
-  ОБЯЗАТЕЛЬНО: Только JSON. Минимум текста.`;
+  const prompt = `
+    ЗАДАЧА: Проведи маркетинговый анализ и составь контент-план на ${days} дней для ниши "${niche}".
+    Цель: ${goal}. Стиль (ToV): ${tone}.
+    
+    ШАГ 1: ИСПОЛЬЗУЙ ПОИСК GOOGLE для анализа 3-х популярных Telegram-каналов конкурентов и 3-х свежих трендов за последнюю неделю в нише "${niche}".
+    
+    ШАГ 2: На основе анализа составь уникальный план постов.
+    ${relevantHistory.length > 0 ? `ВАЖНО: Никогда не повторяй эти темы: ${relevantHistory.join(', ')}.` : ""}
+    
+    ДЛЯ КАЖДОГО ПОСТА ОБЯЗАТЕЛЬНО:
+    1. Title: Заголовок.
+    2. Type: Post, Reels или Story.
+    3. Content: Текст на русском (минимум 300 символов).
+    4. Script: Сценарий (для видео).
+    5. ImagePrompt: ГИПЕР-РЕАЛИСТИЧНОЕ описание визуальной сцены на АНГЛИЙСКОМ. 
+       - Описывай ПРЯМОЙ ПРЕДМЕТ из текста поста как ГЛАВНЫЙ ОБЪЕКТ.
+       - СТИЛЬ: Professional photography, sharp focus, vibrant colors.
+    
+    ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
+    {
+      "analysis": {
+        "competitors": ["@username или t.me/link (что заходит)", ...],
+        "trends": ["новость 1", ...],
+        "summary": "краткая стратегия"
+      },
+      "posts": [
+        {
+          "title": "...",
+          "type": "Post/Reels/Story",
+          "content": "...",
+          "script": "...",
+          "day": 1,
+          "imagePrompt": "..."
+        }
+      ]
+    }
+  `;
 
   const response = await fetchWithRetry(() => ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -76,90 +110,49 @@ export const generateAnalysis = async (niche: string, goal: ContentGoal): Promis
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
-          trends: { type: Type.ARRAY, items: { type: Type.STRING } },
-          summary: { type: Type.STRING },
-        },
-        required: ["competitors", "trends", "summary"]
-      }
-    }
-  }), 5, 8000); // Больше попыток и задержка для поиска
-
-  if (!response.text) throw new Error("Empty AI response during analysis");
-  return JSON.parse(response.text);
-};
-
-export const generateContentPlan = async (
-  niche: string, 
-  period: Period, 
-  tone: ToneOfVoice, 
-  goal: ContentGoal,
-  analysis: AnalysisData,
-  history: ContentHistoryItem[] = []
-): Promise<Post[]> => {
-  const ai = getAI();
-  const days = period === Period.WEEK ? 7 : 30;
-
-  const relevantHistory = history.filter(h => h.niche.toLowerCase() === niche.toLowerCase()).map(h => h.title);
-  const historyPrompt = relevantHistory.length > 0 
-    ? `ВАЖНО: Никогда не повторяй эти темы: ${relevantHistory.join(', ')}.`
-    : "";
-
-  const prompt = `Создай уникальный контент-план на ${days} дней для ниши "${niche}".
-  Цель: ${goal}. 
-  Стиль (ToV): ${tone}.
-  Данные анализа: Конкуренты: ${analysis.competitors.join(', ')}. Тренды: ${analysis.trends.join(', ')}.
-  ${historyPrompt}
-  
-  ДЛЯ КАЖДОГО ПОСТА ОБЯЗАТЕЛЬНО:
-  1. Title: Заголовок.
-  2. Type: Post, Reels или Story.
-  3. Content: Текст на русском (минимум 300 символов).
-  4. Script: Сценарий (для видео).
-  5. ImagePrompt: ГИПЕР-РЕАЛИСТИЧНОЕ описание визуальной сцены на АНГЛИЙСКОМ. 
-     - Описывай ПРЯМОЙ ПРЕДМЕТ из текста поста как ГЛАВНЫЙ ОБЪЕКТ.
-     - Если в тексте "шашлык" — ПЕРВЫМ СЛОВОМ должно быть "Juicy grilled meat skewers".
-     - Если в тексте "улыбки гостей" — ПЕРВЫМ СЛОВОМ должно быть "Happy people laughing".
-     - Описывай текстуры, освещение, фон и атмосферу.
-     - ЗАПРЕЩЕНО: Использовать абстрактные понятия или скучные фоны (стены, пустые комнаты).
-     - СТИЛЬ: Professional food/lifestyle photography, sharp focus, vibrant colors.
-  
-  Верни результат как JSON массив объектов.`;
-
-  const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ["Post", "Reels", "Story"] },
-            content: { type: Type.STRING },
-            script: { type: Type.STRING },
-            day: { type: Type.NUMBER },
-            imagePrompt: { type: Type.STRING }
+          analysis: {
+            type: Type.OBJECT,
+            properties: {
+              competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
+              trends: { type: Type.ARRAY, items: { type: Type.STRING } },
+              summary: { type: Type.STRING }
+            },
+            required: ["competitors", "trends", "summary"]
           },
-          required: ["title", "type", "content", "day", "imagePrompt"]
-        }
+          posts: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                type: { type: Type.STRING, enum: ["Post", "Reels", "Story"] },
+                content: { type: Type.STRING },
+                script: { type: Type.STRING },
+                day: { type: Type.NUMBER },
+                imagePrompt: { type: Type.STRING }
+              },
+              required: ["title", "type", "content", "day", "imagePrompt"]
+            }
+          }
+        },
+        required: ["analysis", "posts"]
       }
     }
-  }));
+  }), 5, 12000); // Большая задержка для комбинированного запроса с поиском
 
-  if (!response.text) throw new Error("Empty AI plan response");
-  const rawPosts = JSON.parse(response.text);
+  if (!response.text) throw new Error("Empty AI response");
+  const result = JSON.parse(response.text);
   
-  return rawPosts.map((p: any) => ({
+  const posts = result.posts.map((p: any) => ({
     ...p,
     id: Math.random().toString(36).substr(2, 9),
     date: new Date(Date.now() + (p.day - 1) * 24 * 60 * 60 * 1000).toLocaleDateString('ru-RU'),
     status: PostStatus.PENDING,
     editCount: 0,
-    imageUrl: '' // Будет сгенерировано позже
+    imageUrl: ''
   }));
+
+  return { analysis: result.analysis, posts };
 };
 
 export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFiles: File[] = []): Promise<string> => {
