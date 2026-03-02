@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { Post, Period, ToneOfVoice, ContentGoal, AnalysisData, PostStatus, ContentHistoryItem } from "../types";
 
 const getAI = () => {
@@ -11,7 +11,7 @@ const getAI = () => {
 };
 
 // Хелпер для повторных попыток при ошибках API или сети
-const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 15000): Promise<any> => {
+const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 30000): Promise<any> => {
   try {
     return await fn();
   } catch (error: any) {
@@ -30,7 +30,7 @@ const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 15000
 
     if (retries > 0 && (isQuotaError || isNetworkError)) {
       const type = isQuotaError ? 'Quota' : 'Network';
-      // Для ошибок квоты ждем долго, для сети чуть меньше
+      // Для ошибок квоты ждем долго (30с -> 60с -> 120с...)
       const nextDelay = isQuotaError ? delay * 2 : delay * 1.5;
       console.warn(`${type} error hit: ${errorMessage}. Retrying in ${delay}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -55,40 +55,65 @@ const fileToGenerativePart = async (file: File) => {
 export const generateAnalysis = async (niche: string, goal: ContentGoal): Promise<AnalysisData> => {
   const ai = getAI();
   const prompt = `Проведи быстрый маркетинговый анализ ниши "${niche}" для цели: "${goal}".
-  ИСПОЛЬЗУЙ ПОИСК GOOGLE:
-  1. Найди 3 реальных Telegram-канала конкурентов в нише "${niche}". 
-  2. Кратко: какие посты у них популярны (кейсы, новости или советы).
-  3. Найди 3 свежих новости/тренда в этой нише за последнюю неделю.
+  ИСПОЛЬЗУЙ ПОИСК GOOGLE (ОБЯЗАТЕЛЬНО):
+  1. Найди 3 РЕАЛЬНЫХ Telegram-канала конкурентов именно в нише "${niche}". Ссылки должны быть вида t.me/username или @username.
+  2. Кратко опиши, какой тип контента у них самый популярный (кейсы, новости, советы).
+  3. Найди 3 актуальных новости или тренда в нише "${niche}" за последние 7 дней.
   
   ВЕРНИ ОТВЕТ СТРОГО В ФОРМАТЕ JSON:
   {
-    "competitors": ["@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)", "@username или t.me/link (что заходит)"],
-    "trends": ["новость 1", "новость 2", "новость 3"],
-    "summary": "Краткая стратегия."
+    "competitors": ["@username (описание)", "@username (описание)", "@username (описание)"],
+    "trends": ["конкретная новость 1", "конкретная новость 2", "конкретная новость 3"],
+    "summary": "Краткая стратегия на основе найденных ТГ-каналов."
   }
   
-  ОБЯЗАТЕЛЬНО: Только JSON. Минимум текста.`;
+  ОБЯЗАТЕЛЬНО: Только JSON. Если поиск не дал результатов, используй свои знания о популярных ТГ-каналах в этой нише.`;
 
-  const response = await fetchWithRetry(() => ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      tools: [{ googleSearch: {} }],
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
-          trends: { type: Type.ARRAY, items: { type: Type.STRING } },
-          summary: { type: Type.STRING },
-        },
-        required: ["competitors", "trends", "summary"]
+  try {
+    const response = await fetchWithRetry(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
+            trends: { type: Type.ARRAY, items: { type: Type.STRING } },
+            summary: { type: Type.STRING },
+          },
+          required: ["competitors", "trends", "summary"]
+        }
       }
-    }
-  }), 5, 15000);
+    }), 3, 30000);
 
-  if (!response.text) throw new Error("Empty AI response during analysis");
-  return JSON.parse(response.text);
+    if (!response.text) throw new Error("Empty AI response during analysis");
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.warn("Analysis with search failed, falling back to basic analysis", error);
+    // Фолбек: генерация анализа БЕЗ поиска, если квоты на поиск исчерпаны
+    const fallbackResponse = await fetchWithRetry(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt.replace("ИСПОЛЬЗУЙ ПОИСК GOOGLE:", "ИСПОЛЬЗУЙ СВОИ ЗНАНИЯ (БЕЗ ПОИСКА):"),
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            competitors: { type: Type.ARRAY, items: { type: Type.STRING } },
+            trends: { type: Type.ARRAY, items: { type: Type.STRING } },
+            summary: { type: Type.STRING },
+          },
+          required: ["competitors", "trends", "summary"]
+        }
+      }
+    }), 2, 10000);
+    
+    if (!fallbackResponse.text) throw new Error("Empty AI fallback response");
+    return JSON.parse(fallbackResponse.text);
+  }
 };
 
 export const generateContentPlan = async (
@@ -146,7 +171,7 @@ export const generateContentPlan = async (
         }
       }
     }
-  }), 5, 10000);
+  }), 5, 20000);
 
   if (!response.text) throw new Error("Empty AI plan response");
   const rawPosts = JSON.parse(response.text);

@@ -96,13 +96,14 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('cf_content_history', JSON.stringify(newHistory.slice(-100)));
 
-      // 3. Фоновая генерация изображений
-      for (const post of posts) {
+      // 3. Фоновая генерация изображений (только для первых 3 постов для экономии квот)
+      const postsToAutoGenerate = posts.slice(0, 3);
+      for (const post of postsToAutoGenerate) {
         if (currentGenId !== generationIdRef.current) break;
         
         try {
-          // Увеличиваем задержку до 10 секунд для гарантированного обхода лимитов 429
-          await new Promise(resolve => setTimeout(resolve, 10000));
+          // Увеличиваем задержку до 15 секунд для гарантированного обхода лимитов 429
+          await new Promise(resolve => setTimeout(resolve, 15000));
           if (currentGenId !== generationIdRef.current) break;
 
           const imageUrl = await generateImageForPost(post, data.tone, data.files);
