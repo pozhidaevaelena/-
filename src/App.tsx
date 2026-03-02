@@ -84,7 +84,8 @@ const App: React.FC = () => {
         tone: data.tone,
         goal: data.goal,
         posts,
-        analysis
+        analysis,
+        files: data.files
       };
 
       setPlan(newPlan);
@@ -151,9 +152,8 @@ const App: React.FC = () => {
     });
 
     try {
-      // Для регенерации используем пустой массив файлов, если не переданы новые, 
-      // или можно расширить логику для передачи файлов из состояния
-      const imageUrl = await generateImageForPost(post, plan.tone, []);
+      // Для регенерации используем файлы из плана, если они есть
+      const imageUrl = await generateImageForPost(post, plan.tone, plan.files || []);
       setPlan(prev => {
         if (!prev) return null;
         return {
@@ -161,8 +161,16 @@ const App: React.FC = () => {
           posts: prev.posts.map(p => p.id === postId ? { ...p, imageUrl } : p)
         };
       });
-    } catch (error) {
-      alert("Не удалось перегенерировать изображение.");
+    } catch (error: any) {
+      const isQuota = error.message?.includes('429') || error.message?.includes('Quota') || error.message?.includes('RESOURCE_EXHAUSTED');
+      const isOverload = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
+      
+      let msg = "Не удалось перегенерировать изображение.";
+      if (isQuota) msg = "Превышена квота API. Пожалуйста, подождите 1-2 минуты.";
+      else if (isOverload) msg = "Сервер перегружен. Попробуйте нажать кнопку еще раз через 10-20 секунд.";
+      else if (error.message) msg = `Ошибка: ${error.message}`;
+      
+      alert(msg);
     }
   };
 

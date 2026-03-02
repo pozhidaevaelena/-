@@ -53,6 +53,7 @@ export interface ContentPlan {
   goal: ContentGoal;
   posts: Post[];
   analysis?: AnalysisData;
+  files?: File[];
 }
 
 export interface ContentHistoryItem {

@@ -201,20 +201,18 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
     }
     
     const finalImagePrompt = `
-      High-quality professional photography for a Telegram channel.
-      Context: This image is for a Telegram post titled "${post.title}".
-      Post Content Summary: ${post.content.substring(0, 200)}...
-      Visual Scene to Generate: ${post.imagePrompt}.
-      Style: ${tone} aesthetic, vibrant colors, sharp focus, professional lighting.
-      Strict Rules: NO text, NO words, NO letters, NO logos, NO distorted faces.
-      Relevance: The image MUST directly illustrate the core topic of the post (e.g., if it's about food, show the food; if it's about people, show the people).
-      ${userFiles.length > 0 ? "Visual Reference: Match the color palette and mood of the attached image." : ""}
+      Professional photography for ${post.type}.
+      Topic: ${post.title}.
+      Visual Scene: ${post.imagePrompt}.
+      Style: ${tone} aesthetic, high quality, sharp focus.
+      Strict Rules: NO text, NO words, NO letters, NO logos.
+      ${userFiles.length > 0 ? "Visual Reference: Match the mood of the attached image." : ""}
     `.trim();
 
     parts.push({ text: finalImagePrompt });
 
     const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3.1-flash-image-preview',
       contents: { parts },
       config: {
         imageConfig: { aspectRatio: "1:1" }
@@ -222,7 +220,8 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
     }), 3, 20000);
 
     if (!imgResponse.candidates?.[0]?.content?.parts) {
-      throw new Error("API returned no content parts for image");
+      console.error("Full API Response:", JSON.stringify(imgResponse, null, 2));
+      throw new Error("API returned no content parts for image. This might be a safety filter block.");
     }
 
     for (const part of imgResponse.candidates[0].content.parts) {
@@ -230,10 +229,13 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
-    throw new Error("No image data found in AI response (possibly blocked by safety filters)");
+    
+    // Если мы здесь, значит в ответе нет inlineData
+    console.error("No inlineData in parts:", imgResponse.candidates[0].content.parts);
+    throw new Error("No image data found in AI response (possibly blocked by safety filters or empty response)");
   } catch (e: any) {
     console.error("Image generation failed:", e.message || e);
-    throw e; // Пробрасываем ошибку дальше, чтобы UI мог на нее среагировать
+    throw e; 
   }
 };
 
