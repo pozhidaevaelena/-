@@ -212,7 +212,7 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
     parts.push({ text: finalImagePrompt });
 
     const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: { parts },
       config: {
         imageConfig: { aspectRatio: "1:1" }
@@ -277,7 +277,7 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
 
      const imgUpdate = await fetchWithRetry(() => ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
-        contents: finalEditPrompt,
+        contents: { parts: [{ text: finalEditPrompt }] },
         config: { imageConfig: { aspectRatio: "1:1" } }
      }));
      for (const part of imgUpdate.candidates[0].content.parts) {
@@ -297,4 +297,49 @@ export const editPostContent = async (post: Post, feedback: string): Promise<Pos
     editCount: post.editCount + 1,
     status: PostStatus.PENDING
   };
+};
+
+export const generateVideoForPost = async (post: Post): Promise<string> => {
+  const ai = getAI();
+  try {
+    const prompt = `Cinematic high-quality video for ${post.type}. Topic: ${post.title}. Scene: ${post.imagePrompt}. Professional lighting, 4k, smooth motion. NO text.`;
+    
+    let operation = await ai.models.generateVideos({
+      model: 'veo-3.1-fast-generate-preview',
+      prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: '720p',
+        aspectRatio: '9:16'
+      }
+    });
+
+    let attempts = 0;
+    while (!operation.done && attempts < 12) {
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      operation = await ai.operations.getVideosOperation({ operation: operation });
+      attempts++;
+    }
+
+    if (!operation.done) throw new Error("Video generation timed out");
+
+    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) throw new Error("No video link returned from API");
+
+    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    const response = await fetch(downloadLink, {
+      method: 'GET',
+      headers: {
+        'x-goog-api-key': apiKey || '',
+      },
+    });
+
+    if (!response.ok) throw new Error("Failed to download video file");
+    
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  } catch (e: any) {
+    console.error("Video generation failed:", e);
+    throw e;
+  }
 };

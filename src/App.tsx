@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Post, Period, ToneOfVoice, ContentGoal, ContentPlan, PostStatus, ContentHistoryItem } from './types';
-import { generateAnalysis, generateContentPlan, editPostContent, generateImageForPost } from './services/geminiService';
+import { Key, History, LayoutDashboard, FileText, Send } from 'lucide-react';
+import { generateAnalysis, generateContentPlan, editPostContent, generateImageForPost, generateVideoForPost } from './services/geminiService';
 import { sendToTelegram } from './services/telegramService';
 import WizardForm from './components/WizardForm';
 import PostCard from './components/PostCard';
@@ -11,19 +12,31 @@ import AnalysisBoard from './components/AnalysisBoard';
 declare global {
   interface Window {
     Telegram: any;
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
   }
 }
 
 const App: React.FC = () => {
-  const [step, setStep] = useState<'form' | 'dashboard'>('form');
+  const [step, setStep] = useState<'form' | 'dashboard' | 'key-selection'>('form');
   const [loadingStage, setLoadingStage] = useState<number>(-1);
   const [plan, setPlan] = useState<ContentPlan | null>(null);
   const [showPublishDialog, setShowPublishDialog] = useState(false);
   const [history, setHistory] = useState<ContentHistoryItem[]>([]);
   const [isTelegram, setIsTelegram] = useState(false);
+  const [hasKey, setHasKey] = useState<boolean>(false);
   const generationIdRef = React.useRef<number>(0);
 
   useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+      }
+    };
+    checkKey();
     if (window.Telegram?.WebApp) {
       const tg = window.Telegram.WebApp;
       tg.ready();
@@ -57,6 +70,13 @@ const App: React.FC = () => {
     "Генерация уникального плана и сценариев...",
     "Создание и адаптация визуального ряда..."
   ];
+
+  const handleOpenKeySelection = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasKey(true);
+    }
+  };
 
   const handleFormSubmit = async (data: { niche: string, period: Period, tone: ToneOfVoice, goal: ContentGoal, files: File[] }) => {
     if (loadingStage >= 0) return;
@@ -137,12 +157,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRegenerateImage = async (postId: string) => {
+  const handleRegenerateMedia = async (postId: string, type: 'image' | 'video') => {
     if (!plan) return;
     const post = plan.posts.find(p => p.id === postId);
     if (!post) return;
 
-    // Сбрасываем текущую картинку, чтобы показать лоадер
     setPlan(prev => {
       if (!prev) return null;
       return {
@@ -152,22 +171,27 @@ const App: React.FC = () => {
     });
 
     try {
-      // Для регенерации используем файлы из плана, если они есть
-      const imageUrl = await generateImageForPost(post, plan.tone, plan.files || []);
+      let mediaUrl = '';
+      if (type === 'video') {
+        mediaUrl = await generateVideoForPost(post);
+      } else {
+        mediaUrl = await generateImageForPost(post, plan.tone, plan.files || []);
+      }
+      
       setPlan(prev => {
         if (!prev) return null;
         return {
           ...prev,
-          posts: prev.posts.map(p => p.id === postId ? { ...p, imageUrl } : p)
+          posts: prev.posts.map(p => p.id === postId ? { ...p, imageUrl: mediaUrl } : p)
         };
       });
     } catch (error: any) {
       const isQuota = error.message?.includes('429') || error.message?.includes('Quota') || error.message?.includes('RESOURCE_EXHAUSTED');
       const isOverload = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
       
-      let msg = "Не удалось перегенерировать изображение.";
+      let msg = `Не удалось сгенерировать ${type === 'video' ? 'видео' : 'изображение'}.`;
       if (isQuota) msg = "Превышена квота API. Пожалуйста, подождите 1-2 минуты.";
-      else if (isOverload) msg = "Сервер перегружен. Попробуйте нажать кнопку еще раз через 10-20 секунд.";
+      else if (isOverload) msg = "Сервер перегружен. Попробуйте еще раз через 10-20 секунд.";
       else if (error.message) msg = `Ошибка: ${error.message}`;
       
       alert(msg);
@@ -240,6 +264,21 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {!hasKey && (
+        <div className="fixed top-0 left-0 right-0 z-[150] bg-amber-500 text-black py-2 px-4 flex items-center justify-between font-bold text-xs uppercase tracking-widest">
+          <div className="flex items-center gap-2">
+            <Key className="w-4 h-4" />
+            <span>Для генерации фото/видео высокого качества выберите API ключ</span>
+          </div>
+          <button 
+            onClick={handleOpenKeySelection}
+            className="bg-black text-white px-4 py-1 rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            Выбрать ключ
+          </button>
+        </div>
+      )}
+
       {step === 'form' ? (
         <WizardForm onSubmit={handleFormSubmit} isLoading={loadingStage >= 0} />
       ) : (
@@ -278,7 +317,7 @@ const App: React.FC = () => {
                 post={post}
                 onApprove={approvePost}
                 onEdit={handleEditPost}
-                onRegenerateImage={handleRegenerateImage}
+                onRegenerateMedia={handleRegenerateMedia}
               />
             ))}
           </div>
