@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Post, Period, ToneOfVoice, ContentGoal, ContentPlan, PostStatus, ContentHistoryItem } from './types';
-import { generateFullStrategy, editPostContent, generateImageForPost } from './services/geminiService';
+import { generateAnalysis, generateContentPlan, editPostContent, generateImageForPost } from './services/geminiService';
 import { sendToTelegram } from './services/telegramService';
 import WizardForm from './components/WizardForm';
 import PostCard from './components/PostCard';
@@ -65,13 +65,18 @@ const App: React.FC = () => {
       setLoadingStage(0);
       const currentGenId = ++generationIdRef.current;
       
-      // 1. Генерация полной стратегии (Анализ + План) в одном запросе
-      // Это экономит квоты API, так как поиск Google выполняется один раз
-      const { analysis, posts } = await generateFullStrategy(data.niche, data.period, data.tone, data.goal, history);
-      
+      // 1. Анализ ниши (с использованием Google Search)
+      const analysis = await generateAnalysis(data.niche, data.goal);
       if (currentGenId !== generationIdRef.current) return;
       
-      setLoadingStage(3); // Переходим сразу к генерации плана (она уже завершена в одном вызове)
+      // КВОТНЫЙ ПРЕДОХРАНИТЕЛЬ: Пауза перед вторым тяжелым запросом
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      setLoadingStage(2);
+      
+      // 2. Генерация текстового плана (БЕЗ Google Search для экономии квот)
+      const posts = await generateContentPlan(data.niche, data.period, data.tone, data.goal, analysis, history);
+      if (currentGenId !== generationIdRef.current) return;
       
       const newPlan: ContentPlan = {
         niche: data.niche,
@@ -96,8 +101,8 @@ const App: React.FC = () => {
         if (currentGenId !== generationIdRef.current) break;
         
         try {
-          // Увеличиваем задержку до 7 секунд для гарантированного обхода лимитов 429
-          await new Promise(resolve => setTimeout(resolve, 7000));
+          // Увеличиваем задержку до 10 секунд для гарантированного обхода лимитов 429
+          await new Promise(resolve => setTimeout(resolve, 10000));
           if (currentGenId !== generationIdRef.current) break;
 
           const imageUrl = await generateImageForPost(post, data.tone, data.files);
