@@ -98,27 +98,32 @@ const App: React.FC = () => {
 
       // 3. Фоновая генерация изображений (только для первых 3 постов для экономии квот)
       const postsToAutoGenerate = posts.slice(0, 3);
-      for (const post of postsToAutoGenerate) {
-        if (currentGenId !== generationIdRef.current) break;
-        
-        try {
-          // Увеличиваем задержку до 15 секунд для гарантированного обхода лимитов 429
-          await new Promise(resolve => setTimeout(resolve, 15000));
+      (async () => {
+        for (let i = 0; i < postsToAutoGenerate.length; i++) {
+          const post = postsToAutoGenerate[i];
           if (currentGenId !== generationIdRef.current) break;
-
-          const imageUrl = await generateImageForPost(post, data.tone, data.files);
           
-          setPlan(prev => {
-            if (!prev || currentGenId !== generationIdRef.current) return prev;
-            return {
-              ...prev,
-              posts: prev.posts.map(p => p.id === post.id ? { ...p, imageUrl } : p)
-            };
-          });
-        } catch (e) {
-          console.error(`Failed to generate image for post ${post.id}`, e);
+          try {
+            // Для первого поста задержка минимальна, для остальных — 15 секунд
+            if (i > 0) {
+              await new Promise(resolve => setTimeout(resolve, 15000));
+            }
+            if (currentGenId !== generationIdRef.current) break;
+
+            const imageUrl = await generateImageForPost(post, data.tone, data.files);
+            
+            setPlan(prev => {
+              if (!prev || currentGenId !== generationIdRef.current) return prev;
+              return {
+                ...prev,
+                posts: prev.posts.map(p => p.id === post.id ? { ...p, imageUrl } : p)
+              };
+            });
+          } catch (e) {
+            console.error(`Failed to generate image for post ${post.id}`, e);
+          }
         }
-      }
+      })();
 
     } catch (error: any) {
       console.error("Generation error:", error);
