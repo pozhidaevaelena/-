@@ -23,15 +23,21 @@ const fetchWithRetry = async (fn: () => Promise<any>, retries = 5, delay = 30000
       errorMessage.includes('Quota') ||
       errorMessage.includes('limit');
     
+    const isOverloadedError = 
+      errorMessage.includes('503') || 
+      error.status === 503 || 
+      errorMessage.includes('UNAVAILABLE') ||
+      errorMessage.includes('high demand');
+    
     const isNetworkError = 
       errorMessage.includes('Failed to fetch') || 
       errorMessage.includes('NetworkError') ||
       errorMessage.includes('fetch');
 
-    if (retries > 0 && (isQuotaError || isNetworkError)) {
-      const type = isQuotaError ? 'Quota' : 'Network';
-      // Для ошибок квоты ждем долго (30с -> 60с -> 120с...)
-      const nextDelay = isQuotaError ? delay * 2 : delay * 1.5;
+    if (retries > 0 && (isQuotaError || isOverloadedError || isNetworkError)) {
+      const type = isQuotaError ? 'Quota' : (isOverloadedError ? 'High Demand' : 'Network');
+      // Для ошибок квоты или перегрузки ждем долго
+      const nextDelay = (isQuotaError || isOverloadedError) ? delay * 2 : delay * 1.5;
       console.warn(`${type} error hit: ${errorMessage}. Retrying in ${delay}ms... (${retries} left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
       return fetchWithRetry(fn, retries - 1, nextDelay);
