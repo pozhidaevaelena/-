@@ -213,17 +213,21 @@ export const generateImageForPost = async (post: Post, tone: ToneOfVoice, userFi
       config: {
         imageConfig: { aspectRatio: "1:1" }
       }
-    }));
+    }), 3, 20000);
+
+    if (!imgResponse.candidates?.[0]?.content?.parts) {
+      throw new Error("API returned no content parts for image");
+    }
 
     for (const part of imgResponse.candidates[0].content.parts) {
       if (part.inlineData) {
         return `data:image/png;base64,${part.inlineData.data}`;
       }
     }
-    throw new Error("No image data in response");
-  } catch (e) {
-    console.error("Image generation failed", e);
-    return `https://picsum.photos/seed/${post.id}/800/800`;
+    throw new Error("No image data found in AI response (possibly blocked by safety filters)");
+  } catch (e: any) {
+    console.error("Image generation failed:", e.message || e);
+    throw e; // Пробрасываем ошибку дальше, чтобы UI мог на нее среагировать
   }
 };
 
