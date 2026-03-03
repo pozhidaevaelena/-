@@ -117,17 +117,20 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('cf_content_history', JSON.stringify(newHistory.slice(-100)));
 
-      // 3. Фоновая генерация изображений (только для первых 3 постов для экономии квот)
-      const postsToAutoGenerate = posts.slice(0, 3);
+      // 3. Фоновая генерация изображений (увеличиваем количество и паузы для стабильности на бесплатном ключе)
+      const postsToAutoGenerate = posts.slice(0, 7); // Генерируем для первой недели (7 постов)
       (async () => {
+        // Небольшая начальная пауза, чтобы пользователь успел увидеть план
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
         for (let i = 0; i < postsToAutoGenerate.length; i++) {
           const post = postsToAutoGenerate[i];
           if (currentGenId !== generationIdRef.current) break;
           
           try {
-            // Для первого поста задержка минимальна, для остальных — 15 секунд
+            // Пауза между генерациями увеличена до 35 секунд для обхода лимитов 429
             if (i > 0) {
-              await new Promise(resolve => setTimeout(resolve, 15000));
+              await new Promise(resolve => setTimeout(resolve, 35000));
             }
             if (currentGenId !== generationIdRef.current) break;
 

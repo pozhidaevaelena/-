@@ -304,7 +304,7 @@ export const generateVideoForPost = async (post: Post): Promise<string> => {
   try {
     const prompt = `Cinematic high-quality video for ${post.type}. Topic: ${post.title}. Scene: ${post.imagePrompt}. Professional lighting, 4k, smooth motion. NO text.`;
     
-    let operation = await ai.models.generateVideos({
+    let operation = await fetchWithRetry(() => ai.models.generateVideos({
       model: 'veo-3.1-fast-generate-preview',
       prompt,
       config: {
@@ -312,7 +312,7 @@ export const generateVideoForPost = async (post: Post): Promise<string> => {
         resolution: '720p',
         aspectRatio: '9:16'
       }
-    });
+    }), 2, 30000);
 
     let attempts = 0;
     while (!operation.done && attempts < 12) {
